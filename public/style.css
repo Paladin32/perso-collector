@@ -1,0 +1,40 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top, #1b2333, #0b0e14 60%);
+  color: #e7edf5; display: grid; place-items: center;
+  padding: 32px 16px;
+}
+.card {
+  width: 100%; max-width: 720px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px; padding: 28px 28px 20px;
+  backdrop-filter: blur(12px);
+}
+h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: .3px; }
+.sub { margin: 0 0 20px; color: #9fb0c4; font-size: 14px; }
+fieldset {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; margin: 0 0 16px; padding: 16px;
+}
+legend { padding: 0 8px; font-size: 13px; color: #8fa3bb; text-transform: uppercase; letter-spacing: 1px; }
+label { display: block; margin-bottom: 12px; font-size: 13px; color: #c4d0df; }
+label:last-child { margin-bottom: 0; }
+input {
+  display: block; width: 100%; margin-top: 6px;
+  padding: 10px 12px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03); color: #e7edf5;
+  font: inherit; font-size: 14px;
+}
+input:focus { outline: none; border-color: #5b8def; box-shadow: 0 0 0 3px rgba(91,141,239,0.2); }
+button {
+  width: 100%; padding: 12px; border: 0; border-radius: 10px;
+  background: linear-gradient(135deg, #5b8def, #7a5bef);
+  color: white; font-weight: 600; font-size: 15px; cursor: pointer;
+}
+button:disabled { opacity: .6; cursor: not-allowed; }
+.status { margin: 12px 0 0; font-size: 13px; color: #8bd48b; min-height: 18px; }
+.status.error { color: #f28b8b; }
