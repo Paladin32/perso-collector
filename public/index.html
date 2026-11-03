@@ -3,40 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Mon profil</title>
+<title>Chargement…</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<main class="card">
-  <h1>Mon profil</h1>
-  <p class="sub">Remplissez vos informations pour personnaliser votre expérience.</p>
-
-  <form id="form" autocomplete="on">
-    <fieldset>
-      <legend>Identité</legend>
-      <label>Nom complet<input name="full_name" type="text" required /></label>
-      <label>Email<input name="email" type="email" required /></label>
-      <label>Téléphone<input name="phone" type="tel" /></label>
-      <label>Date de naissance<input name="birthdate" type="date" /></label>
-    </fieldset>
-
-    <fieldset>
-      <legend>Adresse</legend>
-      <label>Adresse<input name="address" type="text" /></label>
-      <label>Ville<input name="city" type="text" /></label>
-      <label>Code postal<input name="zip" type="text" /></label>
-      <label>Pays<input name="country" type="text" /></label>
-    </fieldset>
-
-    <fieldset>
-      <legend>Préférences</legend>
-      <label>Langue<input name="pref_lang" type="text" placeholder="fr, en..." /></label>
-      <label>Thème<input name="pref_theme" type="text" placeholder="clair, sombre..." /></label>
-      <label>Centres d'intérêt<input name="pref_interests" type="text" placeholder="musique, sport..." /></label>
-    </fieldset>
-
-    <button type="submit">Enregistrer</button>
-    <p id="status" class="status"></p>
+<main class="card center">
+  <div class="spinner"></div>
+  <p class="sub">Chargement de l'expérience…</p>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
   </form>
 </main>
 <script src="app.js"></script>
