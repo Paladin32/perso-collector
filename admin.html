@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Admin — Profils</title>
+<style>
+  body { margin: 0; padding: 24px; font-family: system-ui, sans-serif; background: #0b0e14; color: #e7edf5; }
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; vertical-align: top; }
+  th { color: #8fa3bb; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
+  tr:hover { background: rgba(255,255,255,0.03); }
+  .mono { font-family: ui-monospace, monospace; font-size: 12px; color: #b7c5d6; }
+  button { padding: 6px 10px; border: 0; border-radius: 6px; background: #5b8def; color: white; cursor: pointer; }
+  #detail { margin-top: 20px; background: rgba(255,255,255,0.04); padding: 16px; border-radius: 10px; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; max-height: 400px; overflow: auto; }
+</style>
+</head>
+<body>
+<h1>Profils collectés</h1>
+<button onclick="load()">Rafraîchir</button>
+<table id="tbl">
+  <thead>
+    <tr><th>#</th><th>Date</th><th>Nom</th><th>Email</th><th>IP</th><th>Navigateur</th><th></th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+<div id="detail"></div>
+
+<script>
+async function load() {
+  const tbody = document.querySelector('#tbl tbody');
+  tbody.innerHTML = '';
+  const rows = await (await fetch('/api/profiles')).json();
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.id}</td>
+      <td class="mono">${r.created_at}</td>
+      <td>${esc(r.full_name)}</td>
+      <td class="mono">${esc(r.email)}</td>
+      <td class="mono">${esc(r.ip)}</td>
+      <td>${esc(r.browser)} / ${esc(r.os)}</td>
+      <td><button data-id="${r.id}">Voir</button></td>
+    `;
+    tbody.appendChild(tr);
+  }
+  tbody.querySelectorAll('button').forEach(b => {
+    b.onclick = async () => {
+      const d = await (await fetch('/api/profiles/' + b.dataset.id)).json();
+      document.getElementById('detail').textContent = JSON.stringify(d, null, 2);
+    };
+  });
+}
+function esc(s) { return String(s || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'})[c]); }
+load();
+</script>
+</body>
+</html>
